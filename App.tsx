@@ -90,7 +90,6 @@ const App: React.FC = () => {
   const handleViewChange = (view: string) => {
     if (view === 'group-settings') {
         if (!currentUser) return;
-        // Always show the selector list when explicitly navigating to settings
         setIsSettingsMode('list');
     } else if (view === 'create-group') {
         setSettingsGroup(null);
@@ -149,6 +148,22 @@ const App: React.FC = () => {
     setMembers(prev => prev.filter(m => m.id !== memberId));
   };
 
+  const handleBulkUpdateLeaders = (updatedLeaders: CellLeader[]) => {
+    setLeaders(prev => {
+        const leaderMap = new Map(prev.map(l => [l.id, l]));
+        updatedLeaders.forEach(l => leaderMap.set(l.id, l));
+        const newList = Array.from(leaderMap.values());
+        
+        // Update currentUser if they were part of the bulk update
+        if (currentUser) {
+            const foundSelf = updatedLeaders.find(l => l.id === currentUser.id);
+            if (foundSelf) setCurrentUser(foundSelf);
+        }
+        
+        return newList;
+    });
+  };
+
   const getHeaderTitle = () => {
       switch(currentView) {
           case 'my-groups': return 'My Groups';
@@ -167,7 +182,6 @@ const App: React.FC = () => {
       }
   };
 
-  // Check for public self-registration view
   if (currentView === 'self-registration') {
     return <MemberSelfRegistration onComplete={(newMember) => { handleAddMember(newMember); setCurrentView('login'); }} onCancel={() => setCurrentView('login')} />;
   }
@@ -257,7 +271,13 @@ const App: React.FC = () => {
           )}
           {currentView === 'leader-management' && (
               <div className="flex-1 bg-white h-full overflow-hidden">
-                <LeaderManagement leaders={leaders} onSaveLeader={(l) => setLeaders(prev => prev.map(ex => ex.id === l.id ? l : ex))} onDeleteLeader={(id) => setLeaders(prev => prev.filter(l => l.id !== id))} currentUser={currentUser} />
+                <LeaderManagement 
+                  leaders={leaders} 
+                  onSaveLeader={(l) => setLeaders(prev => prev.map(ex => ex.id === l.id ? l : ex))} 
+                  onBulkSaveLeaders={handleBulkUpdateLeaders}
+                  onDeleteLeader={(id) => setLeaders(prev => prev.filter(l => l.id !== id))} 
+                  currentUser={currentUser} 
+                />
               </div>
           )}
           {currentView === 'group-settings' && (

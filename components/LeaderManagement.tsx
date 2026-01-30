@@ -5,9 +5,9 @@ import {
     ShieldCheck, Lock, Tags, Eye, EyeOff, Ban, CheckCircle2, Network, 
     ChevronDown, Info, Calendar, UserPlus, Fingerprint, Send, Heart, Briefcase, Camera,
     MessageSquare, ExternalLink, MoveHorizontal, ArrowRight, History, Award, UserMinus, 
-    UserCheck, FileText, TrendingUp
+    UserCheck, FileText, TrendingUp, Download, Upload, FileSpreadsheet, Loader2
 } from 'lucide-react';
-import { CellLeader, TransferRecord, StatusChangeRecord, FollowUpRecord } from '../types';
+import { CellLeader, TransferRecord, StatusChangeRecord, FollowUpRecord, AccountStatus } from '../types';
 import { 
     ROLE_OPTIONS, ROLE_COLORS, GENDERS, PROFILE_AGE_RANGES, 
     MARRIAGE_STATUSES, SPECIAL_CONDITIONS, YES_NO 
@@ -16,6 +16,7 @@ import {
 interface LeaderManagementProps {
   leaders: CellLeader[];
   onSaveLeader: (leader: CellLeader) => void;
+  onBulkSaveLeaders: (leaders: CellLeader[]) => void;
   onDeleteLeader: (leaderId: string) => void;
   currentUser: CellLeader;
 }
@@ -36,11 +37,11 @@ const WHATSAPP_TEMPLATES = [
   {
     id: 'connect',
     title: '聯繫溝通 (Contact)',
-    text: '### 您好，我是教會行政同工，有些關於小組的事項想與您溝通，方便時請回電或訊息，謝謝。'
+    text: '### 您好，我是教會行政同工，有些關於小組事項想與您溝通，方便時請回電或訊息，謝謝。'
   }
 ];
 
-const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLeader, onDeleteLeader, currentUser }) => {
+const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLeader, onBulkSaveLeaders, onDeleteLeader, currentUser }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingLeader, setEditingLeader] = useState<CellLeader | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState<string | null>(null);
@@ -49,6 +50,11 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
   const [isValidatingMember, setIsValidatingMember] = useState(false);
   const [selectedLeaderForWA, setSelectedLeaderForWA] = useState<CellLeader | null>(null);
   
+  // Bulk States
+  const [isBulkProcessing, setIsBulkProcessing] = useState(false);
+  const [importSummary, setImportSummary] = useState<{ new: number, updated: number, errors: string[] } | null>(null);
+  const csvInputRef = useRef<HTMLInputElement>(null);
+
   // Status Change State
   const [pendingStatusChange, setPendingStatusChange] = useState<{ id: string, target: 'active' | 'disabled' } | null>(null);
   const [statusReason, setStatusReason] = useState('');
@@ -69,7 +75,142 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
       .sort((a, b) => (a.mgCode || '').localeCompare(b.mgCode || ''));
   }, [leaders, searchQuery]);
 
-  // Aggregated Timeline logic for the "Pastoral Journey" view in the modal
+  // CSV Logic
+  const handleExportCSV = () => {
+    const headers = [
+        "mgCode", "memberId", "chineseName", "firstName", "lastName", 
+        "email", "phoneNumber", "roles", "parentLeaderName", 
+        "ordinationDate", "generation", "status", "identity"
+    ];
+
+    const rows = leaders.map(l => [
+        l.mgCode || "",
+        l.memberId || "",
+        l.chineseName || "",
+        l.firstName || "",
+        l.lastName || "",
+        l.email,
+        l.phoneNumber,
+        (l.roles || []).join(";"),
+        l.parentLeaderName || "",
+        l.ordinationDate || "",
+        l.generation,
+        l.status,
+        l.identity || ""
+    ]);
+
+    const csvContent = [
+        headers.join(","),
+        ...rows.map(r => r.map(val => `"${val}"`).join(","))
+    ].join("\n");
+
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `Leader_Directory_Export_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDownloadTemplate = () => {
+    const headers = [
+        "mgCode", "memberId", "chineseName", "firstName", "lastName", 
+        "email", "phoneNumber", "roles", "parentLeaderName", 
+        "ordinationDate", "generation", "status", "identity"
+    ];
+    const example = [
+        "GA", "M1001", "張三", "San", "Zhang", "san.zhang@example.com", 
+        "90001000", "小組長;族長", "ROOT", "2023-01-01", "1", "active", "Professional"
+    ];
+    const csvContent = [headers.join(","), example.map(v => `"${v}"`).join(",")].join("\n");
+    const blob = new Blob(["\uFEFF" + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "Cell_Leader_Import_Template.csv";
+    link.click();
+  };
+
+  const handleImportCSV = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsBulkProcessing(true);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+        const text = event.target?.result as string;
+        const lines = text.split(/\r?\n/).filter(line => line.trim() !== "");
+        if (lines.length < 2) {
+            setIsBulkProcessing(false);
+            alert("CSV file is empty or missing headers.");
+            return;
+        }
+
+        const headers = lines[0].split(",").map(h => h.replace(/"/g, "").trim());
+        const importedLeaders: CellLeader[] = [];
+        let newCount = 0;
+        let updateCount = 0;
+        let errors: string[] = [];
+
+        for (let i = 1; i < lines.length; i++) {
+            // Basic CSV parser logic for quoted values with potential semicolons
+            const regex = /(".*?"|[^",\s]+)(?=\s*,|\s*$)/g;
+            const values = lines[i].match(/"[^"]*"|[^,]+/g)?.map(v => v.replace(/^"|"$/g, "").trim()) || [];
+            
+            if (values.length < headers.length) continue;
+
+            const row: any = {};
+            headers.forEach((header, idx) => {
+                row[header] = values[idx];
+            });
+
+            if (!row.email || !row.firstName) {
+                errors.push(`Row ${i+1}: Missing Email or First Name.`);
+                continue;
+            }
+
+            // Map to existing or new
+            const existing = leaders.find(l => l.email === row.email || (l.memberId && l.memberId === row.memberId));
+            
+            if (existing) updateCount++;
+            else newCount++;
+
+            const leaderData: CellLeader = {
+                id: existing?.id || `l-imp-${Date.now()}-${i}`,
+                personId: existing?.personId || `p-imp-${Date.now()}-${i}`,
+                mgCode: row.mgCode || "",
+                memberId: row.memberId || "",
+                chineseName: row.chineseName || "",
+                firstName: row.firstName || "",
+                lastName: row.lastName || "",
+                email: row.email,
+                phoneNumber: row.phoneNumber || "",
+                roles: (row.roles || "").split(";").filter((r: string) => r.length > 0),
+                parentLeaderName: row.parentLeaderName || "",
+                ordinationDate: row.ordinationDate || "",
+                generation: parseInt(row.generation) || 1,
+                status: (row.status as AccountStatus) || "active",
+                identity: row.identity || "",
+                password: existing?.password || "611" + Math.floor(100 + Math.random() * 900),
+                tribeCode: row.mgCode ? row.mgCode.slice(0, 2) : (existing?.tribeCode || ""),
+                groups: existing?.groups || [],
+                transferHistory: existing?.transferHistory || [],
+                statusHistory: existing?.statusHistory || [],
+                followUpRecords: existing?.followUpRecords || []
+            };
+            importedLeaders.push(leaderData);
+        }
+
+        onBulkSaveLeaders(importedLeaders);
+        setImportSummary({ new: newCount, updated: updateCount, errors });
+        setIsBulkProcessing(false);
+        if (csvInputRef.current) csvInputRef.current.value = "";
+    };
+    reader.readAsText(file);
+  };
+
   const getTimelineEvents = (leader: CellLeader) => {
     const events: { 
         date: string, 
@@ -82,7 +223,6 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
         raw: any
     }[] = [];
 
-    // 1. Ordination
     if (leader.ordinationDate) {
         events.push({
             date: leader.ordinationDate,
@@ -95,7 +235,6 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
         });
     }
 
-    // 2. Transfers
     leader.transferHistory?.forEach(t => {
         events.push({
             date: t.changeDate,
@@ -109,7 +248,6 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
         });
     });
 
-    // 3. Status Changes
     leader.statusHistory?.forEach(s => {
         const isSuspension = s.newStatus === 'disabled';
         events.push({
@@ -124,7 +262,6 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
         });
     });
 
-    // 4. Follow Ups
     leader.followUpRecords?.forEach(f => {
         events.push({
             date: f.date,
@@ -282,7 +419,6 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
 
     onSaveLeader(updatedLeader);
     
-    // Update local editing leader if we are transferring the one currently being edited
     if (editingLeader && editingLeader.id === updatedLeader.id) {
         setEditingLeader(updatedLeader);
     }
@@ -316,7 +452,7 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
   return (
     <div className="flex-1 h-full flex flex-col bg-slate-50 overflow-hidden animate-in fade-in duration-500">
       {/* List Header */}
-      <div className="bg-white px-8 py-6 border-b border-slate-200 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+      <div className="bg-white px-8 py-6 border-b border-slate-200 flex flex-col xl:flex-row justify-between items-start xl:items-center gap-6">
         <div>
           <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-3">
             <Database className="w-7 h-7" style={{ color: BRAND_PURPLE }} />
@@ -324,19 +460,67 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
           </h1>
           <p className="text-sm text-slate-500 font-bold uppercase tracking-wider mt-1">Full management of pastoral accounts</p>
         </div>
-        <button 
-          onClick={handleAddNew}
-          className="flex items-center gap-2 px-6 py-3 text-white rounded-xl font-black text-sm shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95"
-          style={{ backgroundColor: BRAND_PURPLE }}
-        >
-          <UserPlus className="w-5 h-5" />
-          Register New Account
-        </button>
+        
+        <div className="flex flex-wrap items-center gap-3 w-full xl:w-auto">
+            <div className="flex bg-slate-100 p-1 rounded-xl shadow-inner border border-slate-200/50">
+                <button 
+                  onClick={handleExportCSV}
+                  className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-slate-900 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                >
+                  <Download className="w-3.5 h-3.5" /> Export CSV
+                </button>
+                <div className="w-px h-4 bg-slate-300 self-center mx-1" />
+                <button 
+                  onClick={() => csvInputRef.current?.click()}
+                  className="flex items-center gap-2 px-4 py-2 text-slate-600 hover:text-slate-900 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all"
+                >
+                  <Upload className="w-3.5 h-3.5" /> Bulk Import
+                </button>
+                <input type="file" ref={csvInputRef} onChange={handleImportCSV} accept=".csv" className="hidden" />
+            </div>
+
+            <button 
+              onClick={handleDownloadTemplate}
+              className="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 text-slate-500 hover:text-indigo-600 hover:border-indigo-200 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all shadow-sm"
+            >
+              <FileSpreadsheet className="w-3.5 h-3.5" /> Template
+            </button>
+
+            <button 
+              onClick={handleAddNew}
+              className="flex items-center gap-2 px-6 py-3 text-white rounded-xl font-black text-sm shadow-lg shadow-indigo-100 hover:opacity-90 transition-all active:scale-95"
+              style={{ backgroundColor: BRAND_PURPLE }}
+            >
+              <UserPlus className="w-5 h-5" />
+              New Account
+            </button>
+        </div>
       </div>
 
       <div className="flex-1 overflow-hidden flex flex-col p-6 sm:p-8">
+        {/* Import Summary Alert */}
+        {importSummary && (
+            <div className="mb-6 p-5 bg-white border border-emerald-100 rounded-3xl shadow-sm flex items-center justify-between animate-in slide-in-from-top-4">
+                <div className="flex items-center gap-4">
+                    <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center">
+                        <CheckCircle2 className="w-6 h-6" />
+                    </div>
+                    <div>
+                        <h4 className="font-black text-slate-900 text-sm">Import Complete</h4>
+                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-0.5">
+                            {importSummary.new} New Added • {importSummary.updated} Updated • {importSummary.errors.length} Failures
+                        </p>
+                    </div>
+                </div>
+                {importSummary.errors.length > 0 && (
+                    <button onClick={() => alert(importSummary.errors.join("\n"))} className="text-[10px] font-black text-red-600 uppercase border-b border-red-200">View Errors</button>
+                )}
+                <button onClick={() => setImportSummary(null)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400"><X className="w-4 h-4" /></button>
+            </div>
+        )}
+
         <div className="bg-white rounded-[2rem] shadow-sm border border-slate-200/60 flex-1 flex flex-col overflow-hidden">
-          <div className="p-6 border-b border-slate-100">
+          <div className="p-6 border-b border-slate-100 flex justify-between items-center bg-white">
              <div className="relative w-full sm:w-96">
                 <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
                 <input 
@@ -347,6 +531,12 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
                   className="w-full pl-12 pr-4 py-3 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-medium focus:ring-4 focus:ring-indigo-500/10 outline-none transition-all"
                 />
              </div>
+             {isBulkProcessing && (
+                 <div className="flex items-center gap-2 px-4 py-2 bg-indigo-50 text-indigo-600 rounded-full">
+                     <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                     <span className="text-[10px] font-black uppercase tracking-widest">Processing Bulk Data...</span>
+                 </div>
+             )}
           </div>
 
           <div className="flex-1 overflow-auto no-scrollbar">
@@ -474,7 +664,6 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
               </div>
 
               <div className="p-8 pt-4 space-y-8">
-                  {/* Visual Flow */}
                   <div className="flex items-center justify-between p-6 bg-slate-50 rounded-3xl border border-slate-200">
                       <div className="text-center">
                           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Current Parent</p>
@@ -493,7 +682,6 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
                       </div>
                   </div>
 
-                  {/* Input Selection */}
                   <div className="space-y-6">
                       <div className="space-y-2">
                           <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Select New Parent Leader</label>
@@ -562,7 +750,6 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
              
              <div className="p-10 overflow-y-auto no-scrollbar">
                 <div className="max-w-4xl mx-auto">
-                    {/* AVATAR & HEADER */}
                     <div className="flex flex-col items-center mb-12">
                         <div className="relative group cursor-pointer" onClick={() => fileInputRef.current?.click()}>
                             <div className="w-32 h-32 rounded-[2.5rem] overflow-hidden border-4 border-slate-50 shadow-xl bg-slate-100 flex items-center justify-center transition-all group-hover:brightness-90">
@@ -579,7 +766,6 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
                         </div>
                     </div>
 
-                    {/* SECTION 1: IDENTITY */}
                     <SectionTitle title="1. Account Identity (身份)" icon={Tags} />
                     <div className="flex flex-wrap gap-4 mb-10">
                         {ROLE_OPTIONS.map(role => {
@@ -597,7 +783,6 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
-                        {/* SECTION 2: PERSONAL DATA */}
                         <div>
                             <SectionTitle title="2. Personal Data" icon={User} />
                             <div className="space-y-6">
@@ -660,7 +845,6 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
                             </div>
                         </div>
 
-                        {/* SECTION 3: CONTACT & COMMUNICATION */}
                         <div>
                             <SectionTitle title="3. Communication" icon={Mail} />
                             <div className="space-y-6">
@@ -711,7 +895,6 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
                         </div>
                     </div>
 
-                    {/* SECTION 4: MINISTRY & HIERARCHY */}
                     <SectionTitle title="5. Ministry & Hierarchy" icon={Network} />
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
                         <div className="space-y-6">
@@ -796,23 +979,17 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
                         </div>
                     </div>
 
-                    {/* NEW SECTION: MINISTRY JOURNEY TIMELINE */}
                     <SectionTitle title="6. Ministry Journey (牧養歷程時間軸)" icon={TrendingUp} />
                     <div className="mt-8 space-y-0 relative before:content-[''] before:absolute before:left-4 sm:before:left-1/2 before:top-4 before:bottom-4 before:w-0.5 before:bg-slate-100">
                         {getTimelineEvents(editingLeader).length > 0 ? getTimelineEvents(editingLeader).map((event, idx) => (
                             <div key={`${event.type}-${idx}`} className="relative mb-12 last:mb-0">
-                                {/* The node circle */}
                                 <div className={`absolute left-4 sm:left-1/2 -translate-x-1/2 top-0 w-8 h-8 rounded-full border-4 border-white shadow-md z-10 flex items-center justify-center ${event.color}`}>
                                     <event.icon className="w-4 h-4" />
                                 </div>
-
-                                {/* Date Label */}
                                 <div className={`absolute left-16 sm:left-auto sm:right-[calc(50%+2rem)] top-0 pt-1 text-right hidden sm:block`}>
                                     <div className="text-xs font-black text-slate-900 tracking-tight">{event.date}</div>
                                     {event.actor && <div className="text-[9px] font-bold text-slate-400 uppercase">By {event.actor}</div>}
                                 </div>
-
-                                {/* Content Card */}
                                 <div className={`ml-16 sm:ml-0 sm:w-[calc(50%-2rem)] transition-all hover:scale-[1.01]`}>
                                     <div className={`p-5 rounded-3xl border shadow-sm ${idx % 2 === 0 ? 'bg-white border-slate-100' : 'bg-slate-50/50 border-slate-100'} ${event.type === 'status' && event.title.includes('停牌') ? 'border-red-100' : ''}`}>
                                         <div className="sm:hidden text-[9px] font-black text-slate-400 uppercase mb-1">{event.date} {event.actor ? `• By ${event.actor}` : ''}</div>
@@ -831,7 +1008,6 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
                         )}
                     </div>
 
-                    {/* SECURITY FOOTER */}
                     <div className="mt-16 pt-10 border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-10 items-center">
                         <div className="bg-[#0B1120] p-8 rounded-[2.5rem] text-white shadow-2xl relative overflow-hidden group">
                             <div className="flex justify-between items-center relative z-10">
@@ -872,10 +1048,7 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
       {/* WhatsApp Template Modal */}
       {selectedLeaderForWA && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 sm:p-4">
-              <div 
-                  className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300"
-                  onClick={() => setSelectedLeaderForWA(null)}
-              />
+              <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-300" onClick={() => setSelectedLeaderForWA(null)} />
               <div className="relative bg-white w-full max-md rounded-[2.5rem] shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
                   <div className="p-8 pb-6">
                       <div className="flex justify-between items-start mb-6">
@@ -886,14 +1059,8 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
                               <h3 className="text-2xl font-black text-slate-900 tracking-tight">選擇訊息範本</h3>
                               <p className="text-xs font-bold text-slate-400 mt-1 uppercase tracking-wider">To: {selectedLeaderForWA.chineseName || selectedLeaderForWA.firstName}</p>
                           </div>
-                          <button 
-                              onClick={() => setSelectedLeaderForWA(null)}
-                              className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-all"
-                          >
-                              <X className="w-6 h-6" />
-                          </button>
+                          <button onClick={() => setSelectedLeaderForWA(null)} className="p-2 hover:bg-slate-100 rounded-full text-slate-400 transition-all"><X className="w-6 h-6" /></button>
                       </div>
-
                       <div className="space-y-3">
                           {WHATSAPP_TEMPLATES.map((tmpl) => (
                               <button
@@ -905,9 +1072,7 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
                                   <p className="text-sm font-bold text-slate-700 leading-relaxed group-hover:text-slate-900 transition-colors">
                                       {tmpl.text.replace('###', (selectedLeaderForWA.chineseName || selectedLeaderForWA.firstName))}
                                   </p>
-                                  <div className="absolute right-4 bottom-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                                      <ExternalLink className="w-4 h-4 text-[#25D366]" />
-                                  </div>
+                                  <div className="absolute right-4 bottom-4 opacity-0 group-hover:opacity-100 transition-opacity"><ExternalLink className="w-4 h-4 text-[#25D366]" /></div>
                               </button>
                           ))}
                       </div>
@@ -923,11 +1088,9 @@ const LeaderManagement: React.FC<LeaderManagementProps> = ({ leaders, onSaveLead
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
           <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md animate-in fade-in duration-300" onClick={() => setShowDeleteConfirm(null)} />
           <div className="relative bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl p-8 text-center animate-in zoom-in-95 duration-300">
-            <div className="w-20 h-20 bg-red-50 text-red-600 rounded-3xl flex items-center justify-center mx-auto mb-6">
-              <ShieldAlert className="w-10 h-10" />
-            </div>
+            <div className="w-20 h-20 bg-red-50 text-red-600 rounded-3xl flex items-center justify-center mx-auto mb-6"><ShieldAlert className="w-10 h-10" /></div>
             <h4 className="text-2xl font-black text-slate-900 mb-2">Delete Account?</h4>
-            <p className="text-slate-500 font-medium mb-8">This action is irreversible and will remove all user data from the directory.</p>
+            <p className="text-slate-500 font-medium mb-8">Irreversible action removing user data from directory.</p>
             <div className="flex flex-col gap-3">
               <button onClick={() => { onDeleteLeader(showDeleteConfirm); setShowDeleteConfirm(null); }} className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-sm hover:bg-red-700 transition-all shadow-lg shadow-red-100">Confirm Removal</button>
               <button onClick={() => setShowDeleteConfirm(null)} className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm hover:bg-slate-200 transition-all">Keep Account</button>
