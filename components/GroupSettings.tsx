@@ -7,9 +7,11 @@ import {
     FREQUENCIES, TARGET_AUDIENCES, LANGUAGES, 
     CHURCH_SERVICES, MEMBER_RANGES, AGE_RANGES 
 } from './constants';
+import { translations } from '../App';
 
 interface GroupSettingsProps {
   leader: CellLeader;
+  language: 'en' | 'zh';
   existingGroup?: CellGroup | null;
   initialCategory?: GroupCategory | null; 
   onSave: (group: CellGroup) => void;
@@ -20,7 +22,8 @@ interface GroupSettingsProps {
 // Only Open and Disciple cells are formal groups requiring full settings configuration
 const FORMAL_CATEGORIES: GroupCategory[] = ['open_cell', 'disciple_cell'];
 
-const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, existingGroup, initialCategory, onSave, onDelete, onCancel }) => {
+const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, language, existingGroup, initialCategory, onSave, onDelete, onCancel }) => {
+  const t = translations[language];
   const isEditing = !!existingGroup;
 
   // --- Form State ---
@@ -40,6 +43,38 @@ const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, existingGroup, in
   const [selectedAgeRanges, setSelectedAgeRanges] = useState<string[]>(existingGroup?.ageRanges || []);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // Labels Mapping Helpers
+  const getCategoryLabel = (cat: GroupCategory) => {
+      if (language === 'en') return GROUP_CATEGORY_LABELS[cat];
+      const mapping: Record<GroupCategory, string> = {
+          open_cell: '開組', disciple_cell: '門徒小組', pre_cell: '預備開組', relationship: '一對一門訓'
+      };
+      return mapping[cat];
+  };
+
+  const getDayLabel = (day: DayOfWeek) => {
+      if (language === 'en') return day.charAt(0).toUpperCase() + day.slice(1);
+      const mapping: Record<DayOfWeek, string> = {
+          monday: '星期一', tuesday: '星期二', wednesday: '星期三', thursday: '星期四',
+          friday: '星期五', saturday: '星期六', sunday: '星期日'
+      };
+      return mapping[day];
+  };
+
+  const getFrequencyLabel = (freq: GroupFrequency) => {
+      if (language === 'en') return freq === 'every_week' ? 'Every Week' : 'Every Other Week';
+      return freq === 'every_week' ? '每週' : '隔週';
+  };
+
+  const getTargetAudienceLabel = (aud: TargetAudience) => {
+    if (language === 'en') return aud;
+    const mapping: Record<TargetAudience, string> = {
+        Brothers: '弟兄', Sisters: '姊妹', Couples: '夫妻', Mixed: '混合',
+        Teens: '少年', Youth: '青年', 'Young Adults': '職場青年'
+    };
+    return mapping[aud] || aud;
+  };
 
   // Sync state when existingGroup or initialCategory changes
   useEffect(() => {
@@ -140,8 +175,8 @@ const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, existingGroup, in
             <ArrowLeft className="w-6 h-6" />
           </button>
           <div>
-            <h1 className="text-xl font-bold text-slate-800">{isEditing ? 'Cell Group Configuration' : 'Create New Cell Group'}</h1>
-            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{GROUP_CATEGORY_LABELS[category]} Settings</p>
+            <h1 className="text-xl font-bold text-slate-800">{isEditing ? (language === 'zh' ? '小組設定' : 'Cell Group Configuration') : t.createGroup}</h1>
+            <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-0.5">{getCategoryLabel(category)} {language === 'zh' ? '設定' : 'Settings'}</p>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -150,7 +185,7 @@ const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, existingGroup, in
                 className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 rounded-xl font-bold text-sm flex items-center gap-2 shadow-sm transition-all active:scale-95"
             >
                 <Save className="w-4 h-4" />
-                Save Changes
+                {t.saveChanges}
             </button>
         </div>
       </div>
@@ -159,12 +194,12 @@ const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, existingGroup, in
       <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 no-scrollbar">
         <form onSubmit={handleSubmit} className="max-w-2xl mx-auto space-y-2 pb-24">
             
-            <SectionHeader title="Basic Configuration" />
+            <SectionHeader title={t.basicConfig} />
             
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-6">
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-2">Category</label>
+                        <label className="block text-sm font-bold text-slate-700 mb-2">{t.category}</label>
                         <div className="relative">
                             <select 
                                 value={category} 
@@ -172,17 +207,17 @@ const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, existingGroup, in
                                 className="w-full appearance-none p-3.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 outline-none font-bold text-slate-900 transition-all"
                             >
                                 {FORMAL_CATEGORIES.map(key => (
-                                    <option key={key} value={key}>{GROUP_CATEGORY_LABELS[key]}</option>
+                                    <option key={key} value={key}>{getCategoryLabel(key)}</option>
                                 ))}
                             </select>
                             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
                         </div>
                     </div>
                     <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-2">Name Suffix (e.g. Youth, A)</label>
+                        <label className="block text-sm font-bold text-slate-700 mb-2">{t.nameSuffix}</label>
                         <input 
                             type="text" 
-                            placeholder="Identify this specific group"
+                            placeholder={language === 'zh' ? '識別特定小組' : 'Identify this specific group'}
                             value={nameSuffix}
                             onChange={(e) => setNameSuffix(e.target.value)}
                             className="w-full p-3.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 outline-none font-bold text-slate-900 transition-all placeholder:text-slate-300"
@@ -192,27 +227,27 @@ const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, existingGroup, in
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
                     <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-2">Pastor Zone</label>
+                        <label className="block text-sm font-bold text-slate-700 mb-2">{t.pastorZone}</label>
                         <div className="relative">
                             <select 
                                 value={pastorZone} 
                                 onChange={(e) => setPastorZone(e.target.value as ZoneCode)}
                                 className="w-full appearance-none p-3.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 outline-none font-bold text-slate-900 transition-all"
                             >
-                                {ZONES.map(z => <option key={z.code} value={z.code}>{z.label}</option>)}
+                                {ZONES.map(z => <option key={z.code} value={z.code}>{language === 'en' ? z.label : z.label.split('(')[1].replace(')', '') + ' (' + z.code + ')'}</option>)}
                             </select>
                             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
                         </div>
                     </div>
                     <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-2">Frequency</label>
+                        <label className="block text-sm font-bold text-slate-700 mb-2">{t.frequency}</label>
                         <div className="relative">
                             <select 
                                 value={frequency} 
                                 onChange={(e) => setFrequency(e.target.value as GroupFrequency)}
                                 className="w-full appearance-none p-3.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 outline-none font-bold text-slate-900 transition-all"
                             >
-                                {FREQUENCIES.map(f => <option key={f} value={f}>{f}</option>)}
+                                {FREQUENCIES.map(f => <option key={f} value={f}>{getFrequencyLabel(f)}</option>)}
                             </select>
                             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
                         </div>
@@ -221,7 +256,7 @@ const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, existingGroup, in
 
                 {pastorZone !== 'CHI' && (
                     <div>
-                        <label className="block text-sm font-bold text-slate-700 mb-2">Group Type</label>
+                        <label className="block text-sm font-bold text-slate-700 mb-2">{t.groupType}</label>
                         <div className="flex flex-wrap gap-2">
                             {TARGET_AUDIENCES.map(aud => (
                                 <button
@@ -236,7 +271,7 @@ const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, existingGroup, in
                                         }
                                     `}
                                 >
-                                    {aud}
+                                    {getTargetAudienceLabel(aud as TargetAudience)}
                                 </button>
                             ))}
                         </div>
@@ -244,25 +279,25 @@ const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, existingGroup, in
                 )}
             </div>
 
-            <SectionHeader title="Logistics" />
+            <SectionHeader title={t.logistics} />
 
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-6">
                 <div className="grid grid-cols-2 gap-6">
                     <div>
-                         <label className="block text-sm font-bold text-slate-700 mb-2">Meeting Day</label>
+                         <label className="block text-sm font-bold text-slate-700 mb-2">{t.meetingDay}</label>
                          <div className="relative">
                             <select 
                                 value={meetingDay} 
                                 onChange={(e) => setMeetingDay(e.target.value as DayOfWeek)}
                                 className="w-full appearance-none p-3.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 outline-none font-bold text-slate-900 transition-all"
                             >
-                                {DAYS.map(d => <option key={d} value={d}>{d}</option>)}
+                                {DAYS.map(d => <option key={d} value={d}>{getDayLabel(d)}</option>)}
                             </select>
                             <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
                         </div>
                     </div>
                     <div>
-                         <label className="block text-sm font-bold text-slate-700 mb-2">Meeting Time</label>
+                         <label className="block text-sm font-bold text-slate-700 mb-2">{t.meetingTime}</label>
                          <input 
                             type="time" 
                             value={meetingTime} 
@@ -272,10 +307,10 @@ const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, existingGroup, in
                     </div>
                 </div>
                 <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">Location</label>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">{t.location}</label>
                     <input 
                         type="text" 
-                        placeholder="e.g. BIC Room 1, Home, Cafe"
+                        placeholder={language === 'zh' ? '例如：教會1號房、家裡、咖啡店' : 'e.g. BIC Room 1, Home, Cafe'}
                         value={location}
                         onChange={(e) => setLocation(e.target.value)}
                         className="w-full p-3.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 outline-none font-bold text-slate-800 transition-all placeholder:text-slate-300"
@@ -283,11 +318,11 @@ const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, existingGroup, in
                 </div>
             </div>
 
-            <SectionHeader title="Demographics & Service" />
+            <SectionHeader title={t.demoService} />
 
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-100 space-y-6">
                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">Languages</label>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">{t.languages}</label>
                     <div className="flex flex-wrap gap-2">
                         {LANGUAGES.map(lang => (
                             <button
@@ -303,28 +338,28 @@ const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, existingGroup, in
                                 `}
                             >
                                 {selectedLanguages.includes(lang) && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                                {lang}
+                                {language === 'zh' ? (lang === 'Cantonese' ? '廣東話' : lang === 'Mandarin' ? '普通話' : '英語') : lang}
                             </button>
                         ))}
                     </div>
                  </div>
 
                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">Attending Service</label>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">{t.attendingService}</label>
                     <div className="relative">
                         <select 
                             value={service} 
                             onChange={(e) => setService(e.target.value)}
                             className="w-full appearance-none p-3.5 bg-white border border-slate-200 rounded-xl focus:ring-4 focus:ring-blue-500/10 outline-none font-bold text-slate-900 transition-all"
                         >
-                            {CHURCH_SERVICES.map(s => <option key={s} value={s}>{s}</option>)}
+                            {CHURCH_SERVICES.map(s => <option key={s} value={s}>{language === 'zh' ? (s === 'Sunday Service' ? '週日崇拜' : s === 'Saturday Service' ? '週六崇拜' : s === 'Youth Service' ? '青年崇拜' : s) : s}</option>)}
                         </select>
                         <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none" />
                     </div>
                  </div>
 
                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">Regular Member Range</label>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">{t.regularMemberRange}</label>
                     <div className="grid grid-cols-3 sm:grid-cols-5 gap-2">
                         {MEMBER_RANGES.map(range => (
                             <button
@@ -339,14 +374,14 @@ const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, existingGroup, in
                                     }
                                 `}
                             >
-                                {range}
+                                {range} {language === 'zh' ? '人' : ''}
                             </button>
                         ))}
                     </div>
                  </div>
 
                  <div>
-                    <label className="block text-sm font-bold text-slate-700 mb-2">Age Ranges</label>
+                    <label className="block text-sm font-bold text-slate-700 mb-2">{t.ageRanges}</label>
                     <div className="flex flex-wrap gap-2">
                         {AGE_RANGES.map(age => (
                             <button
@@ -362,7 +397,7 @@ const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, existingGroup, in
                                 `}
                             >
                                 {selectedAgeRanges.includes(age) && <Check className="w-3.5 h-3.5 stroke-[3]" />}
-                                {age}
+                                {language === 'zh' ? age.replace('Below', '低於').replace('Above', '高於') : age}
                             </button>
                         ))}
                     </div>
@@ -372,21 +407,21 @@ const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, existingGroup, in
             {/* Danger Zone */}
             {isEditing && (
                 <div className="pt-10">
-                    <SectionHeader title="Danger Zone" />
+                    <SectionHeader title={t.dangerZone} />
                     <div className="bg-red-50/50 p-8 rounded-[2rem] border border-red-100 flex flex-col items-center text-center">
                         <div className="w-16 h-16 bg-white text-red-600 rounded-2xl flex items-center justify-center shadow-sm border border-red-100 mb-4">
                             <Trash2 className="w-8 h-8" />
                         </div>
-                        <h4 className="text-lg font-black text-red-900">Delete this Cell Group?</h4>
+                        <h4 className="text-lg font-black text-red-900">{t.deleteGroupTitle}</h4>
                         <p className="text-xs text-red-700/70 font-bold mt-1 mb-6 max-w-xs">
-                            This will permanently remove the group and all its attendance records. This cannot be undone.
+                            {t.deleteGroupDesc}
                         </p>
                         <button 
                             type="button"
                             onClick={() => setShowDeleteConfirm(true)}
                             className="px-8 py-3 bg-red-600 text-white rounded-xl font-black text-sm shadow-lg shadow-red-200 hover:bg-red-700 transition-all active:scale-95 flex items-center gap-2"
                         >
-                            Delete Group Permanently
+                            {t.deletePermanently}
                         </button>
                     </div>
                 </div>
@@ -402,9 +437,9 @@ const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, existingGroup, in
                 <div className="w-20 h-20 bg-red-50 text-red-600 rounded-3xl flex items-center justify-center mx-auto mb-6">
                     <AlertTriangle className="w-10 h-10" />
                 </div>
-                <h4 className="text-2xl font-black text-slate-900 mb-2">Confirm Deletion</h4>
+                <h4 className="text-2xl font-black text-slate-900 mb-2">{t.confirmDeletion}</h4>
                 <p className="text-sm text-slate-500 font-bold mb-8 leading-relaxed">
-                    Are you absolutely sure? You are about to remove this group from your active list.
+                    {t.confirmDeletionDesc}
                 </p>
                 
                 <div className="flex flex-col gap-3">
@@ -413,14 +448,14 @@ const GroupSettings: React.FC<GroupSettingsProps> = ({ leader, existingGroup, in
                         onClick={handleDelete}
                         className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-sm hover:bg-red-700 transition-all active:scale-95 shadow-lg shadow-red-200"
                     >
-                        Yes, Delete Permanently
+                        {t.deletePermanently}
                     </button>
                     <button 
                         type="button"
                         onClick={() => setShowDeleteConfirm(false)}
                         className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm hover:bg-slate-200 transition-all"
                     >
-                        Cancel
+                        {t.cancel}
                     </button>
                 </div>
             </div>

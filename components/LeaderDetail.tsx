@@ -1,10 +1,11 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
-import { ArrowLeft, Plus, Calendar, X, ChevronRight, Check, ChevronDown, Info, Trash2, AlertTriangle, Zap, UserPlus, Users, Heart, Target, Settings, Clock, MapPin, UserCheck, Sliders, Sparkles } from 'lucide-react';
+import { ArrowLeft, Plus, Calendar, X, ChevronRight, Check, ChevronDown, Info, Trash2, AlertTriangle, Zap, UserPlus, Users, Heart, Target, Settings, Clock, MapPin, UserCheck, Sliders, Sparkles, Lock } from 'lucide-react';
 import { CellLeader, CellGroup, Report, GroupCategory, DayOfWeek, CellMember, GuestRecord } from '../types';
 import { GROUP_CATEGORY_COLORS, GROUP_CATEGORY_LABELS, DAYS, ZONES } from './constants';
 import GroupDetailModal from './GroupDetailModal';
 import AttendanceTracker from './AttendanceTracker';
+import { translations } from '../App';
 
 interface LeaderDetailProps {
   leader: CellLeader | null;
@@ -21,6 +22,7 @@ interface LeaderDetailProps {
   allMembers?: CellMember[];
   allLeaders?: CellLeader[];
   onAddMember?: (member: CellMember) => void;
+  language?: 'en' | 'zh';
 }
 
 const ACTIVE_TAB_STYLES: Record<string, string> = {
@@ -45,8 +47,10 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
   onOpenSettingsList,
   allMembers = [],
   allLeaders = [],
-  onAddMember
+  onAddMember,
+  language = 'en'
 }) => {
+  const t = translations[language];
   const [activeTabId, setActiveTabId] = useState<string>('all');
   
   const [isGroupSelectorOpen, setIsGroupSelectorOpen] = useState(false);
@@ -84,15 +88,12 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
   const effectiveMembers = useMemo(() => {
     const currentGroup = groups.find(g => g.id === selectedGroupIdForReport);
     if (!currentGroup || !leader) return allMembers;
-
     let baseList = allMembers.filter(m => m.groupIds.includes(currentGroup.id));
-
     if (currentGroup.category === 'disciple_cell') {
         const descendants = allLeaders.filter(l => 
             l.parentLeaderId === leader.id && 
             (l.roles.includes('小組長') || l.roles.includes('同工'))
         );
-
         const mappedLeaders: CellMember[] = descendants.map(d => ({
             id: d.id,
             chineseName: d.chineseName || '',
@@ -103,7 +104,6 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
             joinedDate: d.ordinationDate || '',
             isLeader: true 
         } as any));
-
         const existingIds = new Set(baseList.map(m => m.id));
         const uniqueLeaders = mappedLeaders.filter(l => !existingIds.has(l.id));
         return [...baseList, ...uniqueLeaders];
@@ -115,7 +115,6 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
     let reports = activeTabId === 'all' 
       ? groups.flatMap(g => g.reports.map(r => ({ ...r, groupId: g.id, groupCategory: g.category })))
       : groups.find(g => g.id === activeTabId)?.reports.map(r => ({ ...r, groupId: activeTabId, groupCategory: groups.find(g => g.id === activeTabId)?.category || 'open_cell' })) || [];
-
     return [...reports].sort((a, b) => b.gatheringDate.localeCompare(a.gatheringDate));
   }, [activeTabId, groups]);
 
@@ -182,7 +181,6 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
   };
 
   const handleEditReport = (report: any) => {
-      if (!canEdit) return;
       setSelectedGroupIdForReport(report.groupId);
       setEditingReportId(report.id);
       setGatheringDate(report.gatheringDate);
@@ -195,6 +193,7 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
   };
 
   const handleSaveReport = () => {
+      if (!canEdit) return;
       const currentGroup = groups.find(g => g.id === selectedGroupIdForReport);
       if (!currentGroup) return;
       const reportData: Report = {
@@ -208,20 +207,23 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
           attendedMemberIds,
           guests
       };
-
       if (editingReportId) onUpdateReport?.(currentGroup.id, editingReportId, reportData);
       else onAddReport?.(currentGroup.id, reportData);
       setIsReportFormOpen(false);
   };
 
   const handleAttendanceTrackComplete = (memberIds: string[], guestList: GuestRecord[]) => {
+    if (!canEdit) {
+        setIsAttendanceTrackerOpen(false);
+        return;
+    }
     setAttendedMemberIds(memberIds);
     setGuests(guestList);
     setAttendanceCount((memberIds.length + guestList.length + 1).toString());
     setIsAttendanceTrackerOpen(false);
   };
 
-  const fullName = `${leader.chineseName || ''} ${leader.firstName || ''} ${leader.lastName || ''}`.trim();
+  const fullName = `${leader?.chineseName || ''} ${leader?.firstName || ''} ${leader?.lastName || ''}`.trim();
 
   return (
     <div className="flex-1 h-full flex flex-col bg-slate-50 relative overflow-hidden animate-in fade-in duration-300">
@@ -235,13 +237,13 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
                     </button>
                 )}
                 <div>
-                    <h1 className="text-2xl font-bold text-slate-900">{leader.mgCode} - {fullName}</h1>
+                    <h1 className="text-2xl font-bold text-slate-900">{leader?.mgCode} - {fullName}</h1>
                 </div>
             </div>
             {canEdit && (
                 <button onClick={() => onOpenSettingsList?.()} className="flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-sm transition-all active:scale-95 border border-slate-200 shadow-sm">
                     <Sliders className="w-4 h-4" />
-                    <span className="hidden sm:inline">Manage Groups</span>
+                    <span className="hidden sm:inline">{t.manageGroups}</span>
                 </button>
             )}
         </div>
@@ -250,7 +252,7 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
             <div className="sticky top-0 z-10 bg-white/95 backdrop-blur-sm border-b border-slate-200 shadow-sm">
                 <div className="flex overflow-x-auto no-scrollbar py-3 px-4 gap-3">
                     <button onClick={() => setActiveTabId('all')} className={`flex-shrink-0 px-5 py-2 rounded-full text-sm font-bold transition-all ${activeTabId === 'all' ? ACTIVE_TAB_STYLES.all + ' shadow-md' : 'bg-white border border-slate-200 text-slate-600'}`}>
-                        All Records
+                        {t.allRecords}
                     </button>
                     {groups.map(group => (
                         <button key={group.id} onClick={() => setActiveTabId(group.id)} className={`flex-shrink-0 px-5 py-2 rounded-full text-sm font-bold transition-all border whitespace-nowrap ${activeTabId === group.id ? (ACTIVE_TAB_STYLES[group.category] || ACTIVE_TAB_STYLES.all) + ' shadow-md border-transparent' : 'bg-white border border-slate-200 text-slate-600'}`}>
@@ -264,7 +266,7 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
         <div className="max-w-3xl mx-auto p-4 space-y-4">
             {displayedReports.length > 0 ? (
                 displayedReports.map((report) => (
-                    <div key={report.id} onClick={() => handleEditReport(report)} className={`bg-white rounded-xl p-5 shadow-sm border border-slate-100 flex justify-between items-center transition-all ${canEdit ? 'cursor-pointer hover:shadow-md hover:border-blue-200 hover:scale-[1.01] active:scale-[0.99]' : ''}`}>
+                    <div key={report.id} onClick={() => handleEditReport(report)} className={`bg-white rounded-xl p-5 shadow-sm border border-slate-100 flex justify-between items-center transition-all cursor-pointer hover:shadow-md hover:border-blue-200 hover:scale-[1.01] active:scale-[0.99]`}>
                         <div>
                             <div className="text-slate-800 font-bold text-lg flex items-baseline gap-2">
                                 {report.gatheringDate}
@@ -276,7 +278,7 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
                         </div>
                         <div className="flex flex-col items-end pl-4 border-l border-slate-50 ml-2">
                             <span className={`text-3xl font-bold ${report.attendanceCount > 0 ? 'text-blue-600' : 'text-slate-300'}`}>{report.attendanceCount}</span>
-                            <span className="text-xs text-slate-400 uppercase tracking-wide font-medium mt-1">Attendees</span>
+                            <span className="text-xs text-slate-400 uppercase tracking-wide font-medium mt-1">{language === 'zh' ? '出席人數' : 'Attendees'}</span>
                         </div>
                     </div>
                 ))
@@ -285,7 +287,7 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
                     <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-4">
                         <Calendar className="w-10 h-10 text-slate-200" />
                     </div>
-                    <p className="font-bold">No reports found.</p>
+                    <p className="font-bold">{t.noReports}</p>
                 </div>
             )}
         </div>
@@ -294,11 +296,11 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
       <div className="absolute bottom-6 right-6 z-30 flex flex-col gap-3 items-end animate-in zoom-in duration-300">
           <button onClick={() => setIsGroupSelectorOpen(true)} className={`flex items-center justify-center rounded-full shadow-lg hover:shadow-xl transition-all transform hover:scale-105 px-6 py-4 gap-2 ${canEdit ? 'bg-blue-600 text-white' : 'bg-slate-800 text-white'}`}>
               {canEdit ? <Plus className="w-6 h-6" /> : <Info className="w-6 h-6" />}
-              <span className="font-bold text-lg">{canEdit ? 'New Report' : 'Group Info'}</span>
+              <span className="font-bold text-lg">{canEdit ? t.newReport : t.groupInfo}</span>
           </button>
       </div>
 
-      {/* Role-Based Provisioning Modal - List View */}
+      {/* Unified List View Selector */}
       {isGroupSelectorOpen && (
           <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
               <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-sm" onClick={() => setIsGroupSelectorOpen(false)} />
@@ -306,22 +308,21 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
                   
                   <div className="p-8 pb-4 flex justify-between items-center bg-white sticky top-0 z-10 border-b border-slate-50">
                       <div>
-                        <h3 className="text-2xl font-black text-slate-900 tracking-tight">{canEdit ? 'Select Group' : 'View Details'}</h3>
+                        <h3 className="text-2xl font-black text-slate-900 tracking-tight">{canEdit ? t.newReport : (language === 'zh' ? '查看詳情' : 'View Details')}</h3>
                         <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">
-                            {canEdit ? 'Which gathering are you reporting?' : 'Choose a group to see info'}
+                            {canEdit ? (language === 'zh' ? '選擇小組提交報表' : 'Choose a group to report attendance') : (language === 'zh' ? '選擇小組查看資料' : 'Select a group to see information')}
                         </p>
                       </div>
                       <button onClick={() => setIsGroupSelectorOpen(false)} className="p-2 bg-slate-100 rounded-full hover:bg-slate-200 transition-colors"><X className="w-6 h-6 text-slate-500" /></button>
                   </div>
 
-                  <div className="p-8 space-y-8 overflow-y-auto no-scrollbar">
-                      {/* Section: Formal Groups */}
+                  <div className="p-8 space-y-8 overflow-y-auto no-scrollbar flex-1">
+                      {/* Section: Formal Groups (Open/Disciple) */}
                       <div className="space-y-4">
-                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Formal Cell Groups (O & D)</h4>
+                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">{language === 'zh' ? '正式小組' : 'Formal Cell Groups'}</h4>
                           <div className="space-y-3">
                               {availableCategories.filter(c => c === 'open_cell' || c === 'disciple_cell').map(cat => {
                                   const catGroups = groups.filter(g => g.category === cat);
-                                  
                                   if (catGroups.length === 0) {
                                       return (
                                           <button 
@@ -338,14 +339,13 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
                                                   </div>
                                                   <div className="text-left">
                                                       <div className="font-black text-slate-400 text-sm uppercase">{GROUP_CATEGORY_LABELS[cat]}</div>
-                                                      <div className="text-[10px] font-bold text-orange-600 uppercase mt-0.5">Click to Setup Required</div>
+                                                      <div className="text-[10px] font-bold text-orange-600 uppercase mt-0.5">{language === 'zh' ? '需先設定' : 'Setup Required'}</div>
                                                   </div>
                                               </div>
                                               <Plus className="w-5 h-5 text-slate-300 group-hover:text-orange-500 transition-colors" />
                                           </button>
                                       );
                                   }
-
                                   return catGroups.map(group => (
                                       <button 
                                           key={group.id}
@@ -381,9 +381,9 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
                           </div>
                       </div>
 
-                      {/* Section: Flexible Ministries */}
+                      {/* Section: Flexible Ministries (Pre-Cell/Relationship) */}
                       <div className="space-y-4">
-                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">Flexible Ministry (P & R)</h4>
+                          <h4 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] ml-2">{language === 'zh' ? '靈活事奉' : 'Flexible Ministry'}</h4>
                           <div className="grid grid-cols-2 gap-3">
                               {availableCategories.filter(c => c === 'pre_cell' || c === 'relationship').map(cat => {
                                   const existing = groups.find(g => g.category === cat);
@@ -409,7 +409,7 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
                                           </div>
                                           <div className="font-black text-slate-900 text-[10px] uppercase tracking-wider text-center line-clamp-1">{GROUP_CATEGORY_LABELS[cat]}</div>
                                           <div className="text-[8px] font-bold text-blue-600 mt-1 uppercase tracking-tighter">
-                                              {existing ? 'Active Record' : 'Quick Entry'}
+                                              {existing ? (language === 'zh' ? '紀錄輸入' : 'Record Entry') : (language === 'zh' ? '快速輸入' : 'Quick Entry')}
                                           </div>
                                       </button>
                                   );
@@ -418,9 +418,9 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
                       </div>
                   </div>
 
-                  <div className="p-8 bg-slate-50 flex items-center gap-4">
+                  <div className="p-8 bg-slate-50 flex items-center gap-4 flex-shrink-0">
                       <div className="w-10 h-10 rounded-xl bg-white shadow-sm flex items-center justify-center text-blue-600"><Sparkles className="w-5 h-5" /></div>
-                      <p className="text-[11px] font-medium text-slate-500 italic">"Go and make disciples of all nations..."</p>
+                      <p className="text-[11px] font-medium text-slate-500 italic">"Go and make disciples of all nations, baptizing them..."</p>
                   </div>
               </div>
           </div>
@@ -432,7 +432,9 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
               <div className="relative bg-white w-full max-w-lg sm:rounded-3xl shadow-2xl h-[90vh] sm:h-auto flex flex-col animate-in slide-in-from-bottom-full duration-500">
                   <div className="px-6 py-5 border-b bg-slate-50/50 flex justify-between items-center sm:rounded-t-3xl">
                       <div>
-                          <h3 className="font-black text-2xl text-slate-900 tracking-tight">{editingReportId ? 'Edit Report' : 'New Report'}</h3>
+                          <h3 className="font-black text-2xl text-slate-900 tracking-tight">
+                            {canEdit ? (editingReportId ? (language === 'zh' ? '編輯報表' : 'Edit Report') : t.newReport) : (language === 'zh' ? '檢視紀錄' : 'Inspect Record')}
+                          </h3>
                           <p className="text-xs text-slate-500 font-bold uppercase tracking-wider mt-0.5">
                               {groups.find(g => g.id === selectedGroupIdForReport)?.groupName}
                           </p>
@@ -443,48 +445,89 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
                   </div>
 
                   <div className="p-8 space-y-8 overflow-y-auto flex-1 no-scrollbar">
+                      {!canEdit && (
+                          <div className="p-4 bg-blue-50 border border-blue-100 rounded-2xl flex items-center gap-3">
+                              <div className="p-2 bg-white rounded-lg shadow-sm text-blue-600"><Lock className="w-4 h-4" /></div>
+                              <p className="text-[10px] font-black text-blue-900 uppercase tracking-widest leading-tight">{language === 'zh' ? '唯讀檢視模式 (族長/管理員)' : 'Read-Only Review Mode (Upline View)'}</p>
+                          </div>
+                      )}
+
                       <div className="grid grid-cols-2 gap-6">
                           <div className="space-y-2">
-                              <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em]">Date</label>
-                              <input type="date" value={gatheringDate} onChange={(e) => setGatheringDate(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-slate-800 transition-all text-sm" />
+                              <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em]">{language === 'zh' ? '日期' : 'Date'}</label>
+                              <input 
+                                disabled={!canEdit} 
+                                type="date" 
+                                value={gatheringDate} 
+                                onChange={(e) => setGatheringDate(e.target.value)} 
+                                className={`w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-slate-800 transition-all text-sm ${!canEdit ? 'cursor-not-allowed opacity-80' : ''}`} 
+                              />
                           </div>
                           <div className="space-y-2">
-                              <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em]">Time</label>
-                              <input type="time" value={gatheringTime} onChange={(e) => setGatheringTime(e.target.value)} className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-slate-800 transition-all text-sm" />
+                              <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em]">{language === 'zh' ? '時間' : 'Time'}</label>
+                              <input 
+                                disabled={!canEdit} 
+                                type="time" 
+                                value={gatheringTime} 
+                                onChange={(e) => setGatheringTime(e.target.value)} 
+                                className={`w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-bold text-slate-800 transition-all text-sm ${!canEdit ? 'cursor-not-allowed opacity-80' : ''}`} 
+                              />
                           </div>
                       </div>
 
                       <div className="space-y-3">
                           <div className="flex justify-between items-center">
-                              <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em]">Total Attendance</label>
+                              <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em]">{language === 'zh' ? '總出席人數' : 'Total Attendance'}</label>
                               <button 
                                 onClick={() => setIsAttendanceTrackerOpen(true)}
                                 className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-50 text-blue-600 rounded-lg font-bold text-[10px] uppercase border border-blue-100 hover:bg-blue-100 transition-all"
                               >
-                                  <UserCheck className="w-3.5 h-3.5" /> Track Individually
+                                  <UserCheck className="w-3.5 h-3.5" /> {canEdit ? (language === 'zh' ? '點名系統' : 'Track Individually') : (language === 'zh' ? '查看點名' : 'View Individual Presence')}
                               </button>
                           </div>
-                          <input ref={attendanceInputRef} type="number" value={attendanceCount} onChange={(e) => setAttendanceCount(e.target.value)} placeholder="0" className="w-full p-6 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-black text-5xl text-blue-600 transition-all" />
+                          <input 
+                            ref={attendanceInputRef} 
+                            disabled={!canEdit}
+                            type="number" 
+                            value={attendanceCount} 
+                            onChange={(e) => setAttendanceCount(e.target.value)} 
+                            placeholder="0" 
+                            className={`w-full p-6 bg-slate-50 border border-slate-200 rounded-2xl outline-none font-black text-5xl text-blue-600 transition-all ${!canEdit ? 'cursor-not-allowed opacity-80' : ''}`} 
+                          />
                           {attendedMemberIds.length > 0 && (
-                            <p className="text-[10px] font-bold text-slate-400 uppercase">{attendedMemberIds.length} members + {guests.length} guests selected (Leader included)</p>
+                            <p className="text-[10px] font-bold text-slate-400 uppercase">{attendedMemberIds.length} {language === 'zh' ? '門徒' : 'members'} + {guests.length} {language === 'zh' ? '新朋友' : 'guests'}</p>
                           )}
                       </div>
 
                       <div className="space-y-2">
-                          <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em]">Notes / Testimonies</label>
-                          <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Share testimonies..." className="w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl outline-none text-slate-700 transition-all resize-none font-medium" />
+                          <label className="text-[11px] font-black text-slate-400 uppercase tracking-[0.1em]">{language === 'zh' ? '備註 / 見證' : 'Notes / Testimonies'}</label>
+                          <textarea 
+                            disabled={!canEdit}
+                            rows={3} 
+                            value={notes} 
+                            onChange={(e) => setNotes(e.target.value)} 
+                            placeholder={canEdit ? (language === 'zh' ? "分享今日見證..." : "Share testimonies...") : (language === 'zh' ? "此紀錄無備註" : "No testimony shared for this gathering")} 
+                            className={`w-full p-5 bg-slate-50 border border-slate-200 rounded-2xl outline-none text-slate-700 transition-all resize-none font-medium ${!canEdit ? 'cursor-not-allowed opacity-80' : ''}`} 
+                          />
                       </div>
                   </div>
 
                   <div className="p-6 border-t bg-slate-50/50 sm:rounded-b-3xl flex flex-col sm:flex-row gap-3">
-                      {editingReportId && (
+                      {canEdit && editingReportId && (
                         <button onClick={() => setShowDeleteConfirm(true)} className="flex-1 sm:flex-none sm:w-20 py-4 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl font-bold flex items-center justify-center transition-all group">
                             <Trash2 className="w-5 h-5" />
                         </button>
                       )}
-                      <button onClick={handleSaveReport} className="flex-1 py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-xl flex items-center justify-center gap-3 shadow-xl active:scale-[0.97] transition-all">
-                          <Check className="w-6 h-6 stroke-[3]" /> {editingReportId ? 'Update Report' : 'Submit Report'}
-                      </button>
+                      
+                      {canEdit ? (
+                        <button onClick={handleSaveReport} className="flex-1 py-5 bg-blue-600 hover:bg-blue-700 text-white rounded-2xl font-black text-xl flex items-center justify-center gap-3 shadow-xl active:scale-[0.97] transition-all">
+                            <Check className="w-6 h-6 stroke-[3]" /> {editingReportId ? (language === 'zh' ? '更新報表' : 'Update Report') : (language === 'zh' ? '提交報表' : 'Submit Report')}
+                        </button>
+                      ) : (
+                        <button onClick={() => setIsReportFormOpen(false)} className="flex-1 py-5 bg-slate-800 text-white rounded-2xl font-black text-lg flex items-center justify-center gap-3 shadow-xl active:scale-[0.97] transition-all">
+                            {language === 'zh' ? '關閉檢視' : 'Close Review'}
+                        </button>
+                      )}
                   </div>
               </div>
           </div>
@@ -499,6 +542,7 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
             onComplete={handleAttendanceTrackComplete}
             onCancel={() => setIsAttendanceTrackerOpen(false)}
             onAddMember={onAddMember}
+            readOnly={!canEdit}
         />
       )}
 
@@ -515,7 +559,7 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
               <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-md" onClick={() => setShowDeleteConfirm(false)} />
               <div className="relative bg-white w-full max-w-sm rounded-[2.5rem] shadow-2xl p-8 text-center animate-in zoom-in-95">
                   <div className="w-20 h-20 bg-red-50 text-red-600 rounded-3xl flex items-center justify-center mx-auto mb-6"><AlertTriangle className="w-10 h-10" /></div>
-                  <h4 className="text-2xl font-black text-slate-900 mb-2">Delete Report?</h4>
+                  <h4 className="text-2xl font-black text-slate-900 mb-2">{language === 'zh' ? '刪除報表？' : 'Delete Report?'}</h4>
                   <div className="flex flex-col gap-3 mt-8">
                       <button onClick={() => {
                         if (editingReportId && selectedGroupIdForReport) {
@@ -523,8 +567,8 @@ const LeaderDetail: React.FC<LeaderDetailProps> = ({
                             setIsReportFormOpen(false);
                             setShowDeleteConfirm(false);
                         }
-                      }} className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-sm hover:bg-red-700">Delete Permanently</button>
-                      <button onClick={() => setShowDeleteConfirm(false)} className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm">Cancel</button>
+                      }} className="w-full py-4 bg-red-600 text-white rounded-2xl font-black text-sm hover:bg-red-700">{language === 'zh' ? '永久刪除' : 'Delete Permanently'}</button>
+                      <button onClick={() => setShowDeleteConfirm(false)} className="w-full py-4 bg-slate-100 text-slate-600 rounded-2xl font-black text-sm">{language === 'zh' ? '取消' : 'Cancel'}</button>
                   </div>
               </div>
           </div>

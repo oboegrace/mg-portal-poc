@@ -1,11 +1,14 @@
 
 import React, { useState, useEffect } from 'react';
-import { Mail, Phone, Lock, Eye, EyeOff, ArrowRight, Loader2, ChevronDown, Check, X, ShieldAlert, KeyRound, Smartphone } from 'lucide-react';
+import { Mail, Phone, Lock, Eye, EyeOff, ArrowRight, Loader2, ChevronDown, Check, X, ShieldAlert, KeyRound, Smartphone, Globe } from 'lucide-react';
 import { CellLeader } from '../types';
+import { translations } from '../App';
 
 interface LoginProps {
   onLoginSuccess: (leader: CellLeader) => void;
   leaders: CellLeader[];
+  language: 'en' | 'zh';
+  onLanguageToggle: () => void;
 }
 
 const COUNTRY_CODES = [
@@ -19,7 +22,8 @@ const COUNTRY_CODES = [
 
 type ForgotStep = 'identity' | 'otp' | 'reset' | 'success';
 
-const Login: React.FC<LoginProps> = ({ onLoginSuccess, leaders }) => {
+const Login: React.FC<LoginProps> = ({ onLoginSuccess, leaders, language, onLanguageToggle }) => {
+  const t = translations[language];
   const [authMode, setAuthMode] = useState<'email' | 'phone'>('email');
   const [identifier, setIdentifier] = useState(''); 
   const [password, setPassword] = useState('');
@@ -81,7 +85,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, leaders }) => {
       );
 
       if (!accountExists) {
-        setForgotError("沒有這個帳號，請輸入其他email/phone再嘗試");
+        setForgotError(language === 'zh' ? "沒有這個帳號，請輸入其他email/phone再嘗試" : "Account not found, please try another email/phone.");
         setForgotLoading(false);
       } else {
         setForgotLoading(false);
@@ -93,7 +97,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, leaders }) => {
   const handleOtpSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (otpValue.length < 4) {
-      setForgotError("請輸入有效的驗證碼");
+      setForgotError(language === 'zh' ? "請輸入有效的驗證碼" : "Please enter a valid OTP.");
       return;
     }
     setForgotLoading(true);
@@ -107,16 +111,15 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, leaders }) => {
   const handleResetPassword = (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword.length < 6) {
-      setForgotError("新密碼必須至少為 6 個字元");
+      setForgotError(language === 'zh' ? "新密碼必須至少為 6 個字元" : "New password must be at least 6 characters.");
       return;
     }
     if (newPassword !== confirmNewPassword) {
-      setForgotError("兩次輸入的密碼不一致");
+      setForgotError(language === 'zh' ? "兩次輸入的密碼不一致" : "Passwords do not match.");
       return;
     }
     setForgotLoading(true);
     setTimeout(() => {
-      // In a real app, we'd call an API here
       setForgotLoading(false);
       setForgotStep('success');
     }, 1200);
@@ -153,21 +156,21 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, leaders }) => {
                   onClick={() => { setAuthMode('email'); setIdentifier(''); setError(null); }}
                   className={`flex-1 py-2 text-sm font-bold z-10 transition-colors ${authMode === 'email' ? 'text-orange-600' : 'text-slate-500'}`}
               >
-                  Email
+                  {t.email}
               </button>
               <button 
                   type="button"
                   onClick={() => { setAuthMode('phone'); setIdentifier(''); setError(null); }}
                   className={`flex-1 py-2 text-sm font-bold z-10 transition-colors ${authMode === 'phone' ? 'text-orange-600' : 'text-slate-500'}`}
               >
-                  Phone
+                  {t.phone}
               </button>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-6">
             <div>
               <label className="block text-sm font-bold text-slate-700 mb-2">
-                  {authMode === 'email' ? 'Email Address' : 'Phone Number'}
+                  {authMode === 'email' ? t.email : t.phone}
               </label>
               
               <div className="relative group">
@@ -219,7 +222,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, leaders }) => {
 
             <div>
               <div className="flex justify-between items-center mb-2">
-                <label className="text-sm font-bold text-slate-700">Password</label>
+                <label className="text-sm font-bold text-slate-700">{t.password}</label>
               </div>
               <div className="relative group">
                 <div className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-orange-500 transition-colors">
@@ -256,10 +259,10 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, leaders }) => {
                             <Check className={`w-3.5 h-3.5 text-white transition-transform ${rememberMe ? 'scale-100' : 'scale-0'}`} />
                         </div>
                     </div>
-                    <span className="text-sm font-medium text-slate-600 group-hover:text-slate-900 transition-colors">Remember Me</span>
+                    <span className="text-sm font-medium text-slate-600 group-hover:text-slate-900 transition-colors">{t.rememberMe}</span>
                 </label>
                 <button type="button" onClick={() => setShowForgotModal(true)} className="text-xs font-bold text-orange-600 hover:text-orange-700">
-                  Forgot Password?
+                  {t.forgotPassword}
                 </button>
             </div>
 
@@ -281,22 +284,29 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, leaders }) => {
               {isLoading ? (
                 <>
                   <Loader2 className="w-5 h-5 animate-spin" />
-                  Authenticating...
+                  {t.authenticating}
                 </>
               ) : (
                 <>
-                  Sign In
+                  {t.signIn}
                   <ArrowRight className="w-5 h-5" />
                 </>
               )}
             </button>
           </form>
 
-          <div className="mt-8 pt-8 border-t border-slate-100 text-center">
+          <div className="mt-8 flex flex-col items-center gap-4">
             <p className="text-slate-500 text-sm">
-              New leader?{' '}
-              <button className="font-bold text-orange-600 hover:text-orange-700">Request Access</button>
+              {t.newLeader}{' '}
+              <button className="font-bold text-orange-600 hover:text-orange-700">{t.requestAccess}</button>
             </p>
+            <button 
+              onClick={onLanguageToggle}
+              className="flex items-center gap-2 px-4 py-2 bg-slate-50 text-slate-500 rounded-full text-xs font-black uppercase tracking-widest border border-slate-100 hover:bg-slate-100 transition-all"
+            >
+              <Globe className="w-3.5 h-3.5" />
+              {t.switchLang}
+            </button>
           </div>
         </div>
         
@@ -334,8 +344,8 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, leaders }) => {
                                 <div className="w-16 h-16 bg-orange-50 text-orange-600 rounded-3xl flex items-center justify-center mx-auto mb-4">
                                     <Smartphone className="w-8 h-8" />
                                 </div>
-                                <h3 className="text-2xl font-black text-slate-900">Reset Password</h3>
-                                <p className="text-slate-500 text-sm mt-2">Choose how you'd like to verify your account</p>
+                                <h3 className="text-2xl font-black text-slate-900">{language === 'zh' ? '重設密碼' : 'Reset Password'}</h3>
+                                <p className="text-slate-500 text-sm mt-2">{language === 'zh' ? '選擇驗證帳戶的方式' : "Choose how you'd like to verify your account"}</p>
                             </div>
 
                             <div className="flex p-1 bg-slate-50 rounded-2xl mb-6 border border-slate-100">
@@ -343,13 +353,13 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, leaders }) => {
                                     onClick={() => { setForgotMode('email'); setForgotIdentifier(''); setForgotError(null); }}
                                     className={`flex-1 py-3 text-sm font-black rounded-xl transition-all ${forgotMode === 'email' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
                                 >
-                                    Email
+                                    {t.email}
                                 </button>
                                 <button 
                                     onClick={() => { setForgotMode('phone'); setForgotIdentifier(''); setForgotError(null); }}
                                     className={`flex-1 py-3 text-sm font-black rounded-xl transition-all ${forgotMode === 'phone' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-400'}`}
                                 >
-                                    Phone
+                                    {t.phone}
                                 </button>
                             </div>
 
@@ -390,7 +400,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, leaders }) => {
                                     disabled={forgotLoading}
                                     className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-50"
                                 >
-                                    {forgotLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Verify Account"}
+                                    {forgotLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (language === 'zh' ? "驗證帳戶" : "Verify Account")}
                                 </button>
                             </form>
                         </div>
@@ -404,7 +414,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, leaders }) => {
                                     <ShieldAlert className="w-8 h-8" />
                                 </div>
                                 <h3 className="text-2xl font-black text-slate-900">OTP Verification</h3>
-                                <p className="text-slate-500 text-sm mt-2 px-4">We've sent a 6-digit code to <br/><span className="text-slate-900 font-bold">{forgotIdentifier}</span></p>
+                                <p className="text-slate-500 text-sm mt-2 px-4">{language === 'zh' ? '我們已向以下帳號發送了 6 位驗證碼：' : "We've sent a 6-digit code to"}<br/><span className="text-slate-900 font-bold">{forgotIdentifier}</span></p>
                             </div>
 
                             <form onSubmit={handleOtpSubmit} className="space-y-6">
@@ -426,11 +436,11 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, leaders }) => {
                                     disabled={forgotLoading}
                                     className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 hover:bg-slate-800 transition-all active:scale-95 disabled:opacity-50"
                                 >
-                                    {forgotLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Confirm Code"}
+                                    {forgotLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (language === 'zh' ? "確認驗證碼" : "Confirm Code")}
                                 </button>
                                 
                                 <p className="text-center text-xs font-bold text-slate-400">
-                                    Didn't receive code? <button type="button" className="text-blue-600">Resend</button>
+                                    {language === 'zh' ? '沒有收到？' : "Didn't receive code?"} <button type="button" className="text-blue-600">{language === 'zh' ? '重發' : 'Resend'}</button>
                                 </p>
                             </form>
                         </div>
@@ -443,14 +453,14 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, leaders }) => {
                                 <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-3xl flex items-center justify-center mx-auto mb-4">
                                     <KeyRound className="w-8 h-8" />
                                 </div>
-                                <h3 className="text-2xl font-black text-slate-900">Create New Password</h3>
-                                <p className="text-slate-500 text-sm mt-2">Enter at least 6 characters</p>
+                                <h3 className="text-2xl font-black text-slate-900">{language === 'zh' ? '設定新密碼' : "Create New Password"}</h3>
+                                <p className="text-slate-500 text-sm mt-2">{language === 'zh' ? '請輸入至少 6 位字元' : "Enter at least 6 characters"}</p>
                             </div>
 
                             <form onSubmit={handleResetPassword} className="space-y-5">
                                 <div className="relative">
                                     <input 
-                                        type={showNewPassword ? 'text' : 'password'} required placeholder="New Password"
+                                        type={showNewPassword ? 'text' : 'password'} required placeholder={language === 'zh' ? "新密碼" : "New Password"}
                                         value={newPassword} onChange={(e) => setNewPassword(e.target.value)}
                                         className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none font-bold text-slate-800 transition-all text-sm"
                                     />
@@ -459,7 +469,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, leaders }) => {
                                     </button>
                                 </div>
                                 <input 
-                                    type={showNewPassword ? 'text' : 'password'} required placeholder="Confirm New Password"
+                                    type={showNewPassword ? 'text' : 'password'} required placeholder={language === 'zh' ? "確認新密碼" : "Confirm New Password"}
                                     value={confirmNewPassword} onChange={(e) => setConfirmNewPassword(e.target.value)}
                                     className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl focus:ring-4 focus:ring-emerald-500/10 focus:border-emerald-500 outline-none font-bold text-slate-800 transition-all text-sm"
                                 />
@@ -474,7 +484,7 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, leaders }) => {
                                     disabled={forgotLoading}
                                     className="w-full py-4 bg-emerald-600 text-white rounded-2xl font-black text-sm flex items-center justify-center gap-2 hover:bg-emerald-700 transition-all active:scale-95 disabled:opacity-50 shadow-lg shadow-emerald-100"
                                 >
-                                    {forgotLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Reset & Log In"}
+                                    {forgotLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : (language === 'zh' ? "重設並登入" : "Reset & Log In")}
                                 </button>
                             </form>
                         </div>
@@ -486,13 +496,13 @@ const Login: React.FC<LoginProps> = ({ onLoginSuccess, leaders }) => {
                             <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mx-auto mb-6">
                                 <Check className="w-10 h-10 stroke-[3]" />
                             </div>
-                            <h3 className="text-2xl font-black text-slate-900 mb-2">Password Updated!</h3>
-                            <p className="text-slate-500 font-medium mb-8">Your security is our priority. You can now log in with your new password.</p>
+                            <h3 className="text-2xl font-black text-slate-900 mb-2">{language === 'zh' ? '密碼已更新' : "Password Updated!"}</h3>
+                            <p className="text-slate-500 font-medium mb-8">{language === 'zh' ? '您的安全性是我們的首要任務，現在可以使用新密碼登入。' : "Your security is our priority. You can now log in with your new password."}</p>
                             <button 
                                 onClick={closeForgotModal}
                                 className="w-full py-4 bg-slate-900 text-white rounded-2xl font-black text-sm hover:bg-slate-800 transition-all active:scale-95"
                             >
-                                Back to Login
+                                {language === 'zh' ? '返回登入' : "Back to Login"}
                             </button>
                         </div>
                     )}

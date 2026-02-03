@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { User, Users, Settings, Bell, Globe, LogOut, X, PlusCircle, ChevronDown, ChevronRight, LayoutDashboard, Database, BarChartHorizontal, ClipboardCheck, ShieldCheck, Target, Camera, Contact } from 'lucide-react';
 import { CellLeader, CellGroup } from '../types';
+import { translations } from '../App';
 
 interface SidebarProps {
   isOpen: boolean;
@@ -13,6 +14,8 @@ interface SidebarProps {
   onLogout: () => void;
   activeSubItemId?: string | null;
   hasDescendants?: boolean;
+  language: 'en' | 'zh';
+  onLanguageToggle: () => void;
 }
 
 const Sidebar: React.FC<SidebarProps> = ({ 
@@ -24,15 +27,17 @@ const Sidebar: React.FC<SidebarProps> = ({
   onEditGroup,
   onLogout,
   activeSubItemId,
-  hasDescendants = false
+  hasDescendants = false,
+  language,
+  onLanguageToggle
 }) => {
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
+  const t = translations[language];
 
   const fullName = `${user.chineseName || ''} ${user.firstName || ''} ${user.lastName || ''}`.trim();
   const displayName = fullName || user.mgCode;
   const initialChar = (user.chineseName ? user.chineseName.charAt(0) : (user.firstName ? user.firstName.charAt(0) : user.mgCode.charAt(0))) || '?';
 
-  // Only show Formal Groups (Open/Disciple) in the settings menu
   const formalGroups = user.groups.filter(g => !g.isDeleted && (g.category === 'open_cell' || g.category === 'disciple_cell'));
   const isAdmin = !!user.isAdmin;
 
@@ -49,19 +54,19 @@ const Sidebar: React.FC<SidebarProps> = ({
   }, [activeSubItemId, currentView]);
 
   const menuItems = [
-    { id: 'my-groups', icon: User, label: 'My Groups' },
-    { id: 'member-directory', icon: Contact, label: 'Member Directory' },
-    ...(hasDescendants ? [{ id: 'descendant-groups', icon: Users, label: 'Descendant Groups' }] : []),
+    { id: 'my-groups', icon: User, label: t.myGroups },
+    { id: 'member-directory', icon: Contact, label: t.memberDirectory },
+    ...(hasDescendants ? [{ id: 'descendant-groups', icon: Users, label: t.descendantGroups }] : []),
     ...(isAdmin ? [
-        { id: 'admin-dashboard', icon: LayoutDashboard, label: 'Organization Insight' },
-        { id: 'tribe-statistics', icon: BarChartHorizontal, label: 'Tribe Statistics' },
-        { id: 'lineage-photo-view', icon: Camera, label: 'Lineage Photo View' },
-        { id: 'pastoral-evaluation', icon: Target, label: 'Pastoral Evaluation' },
-        { id: 'reporting-status', icon: ClipboardCheck, label: 'Reporting Status' },
-        { id: 'leader-management', icon: Database, label: 'Leader Management' }
+        { id: 'admin-dashboard', icon: LayoutDashboard, label: t.orgInsight },
+        { id: 'tribe-statistics', icon: BarChartHorizontal, label: t.tribeStats },
+        { id: 'lineage-photo-view', icon: Camera, label: t.lineagePhoto },
+        { id: 'pastoral-evaluation', icon: Target, label: t.pastoralEval },
+        { id: 'reporting-status', icon: ClipboardCheck, label: t.reportingStatus },
+        { id: 'leader-management', icon: Database, label: t.leaderMgmt }
     ] : []),
-    { id: 'group-settings', icon: Settings, label: 'Cell Group Settings', hasSubMenu: true },
-    { id: 'notifications', icon: Bell, label: 'Notification', badge: 3 },
+    { id: 'group-settings', icon: Settings, label: t.settings, hasSubMenu: true },
+    { id: 'notifications', icon: Bell, label: t.notifications, badge: 3 },
   ];
 
   const handleNavigation = (itemId: string, hasSubMenu?: boolean) => {
@@ -158,14 +163,14 @@ const Sidebar: React.FC<SidebarProps> = ({
                                   const isSubActive = activeSubItemId === group.id;
                                   return (
                                       <button key={group.id} onClick={() => handleSubItemClick(group)} className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors ${isSubActive ? 'bg-white/20 text-white font-bold' : 'text-orange-100 hover:bg-white/10 hover:text-white'}`}>
-                                          <div className="truncate">{group.category === 'open_cell' ? 'Open Cell' : 'Disciple Cell'}</div>
+                                          <div className="truncate">{group.category === 'open_cell' ? (language === 'zh' ? '開組' : 'Open Cell') : (language === 'zh' ? '門徒' : 'Disciple Cell')}</div>
                                           <div className="opacity-80 text-[10px]">{group.groupDay} {group.groupTime}</div>
                                       </button>
                                   );
                               })
                           ) : <div className="px-3 py-2 text-xs text-orange-200 italic">No formal groups</div>}
                           <button onClick={handleCreateGroupClick} className={`w-full text-left px-3 py-2 rounded-lg text-xs font-medium transition-colors flex items-center gap-2 mt-1 ${currentView === 'create-group' ? 'bg-white/10 text-white' : 'text-orange-100 hover:bg-white/10 hover:text-white'}`}>
-                             <PlusCircle className="w-3 h-3 opacity-70" /> Create Cell Group
+                             <PlusCircle className="w-3 h-3 opacity-70" /> {t.createGroup}
                           </button>
                       </div>
                   )}
@@ -174,8 +179,14 @@ const Sidebar: React.FC<SidebarProps> = ({
           })}
         </nav>
         <div className="p-4 border-t border-orange-600/30 space-y-2">
-            <button className="w-full flex items-center px-3 py-2 text-sm text-orange-100 hover:text-white rounded-lg hover:bg-white/5 transition-colors"><Globe className="w-5 h-5 mr-3 opacity-80" />Language</button>
-            <button onClick={onLogout} className="w-full flex items-center px-3 py-2 text-sm text-orange-100 hover:text-white rounded-lg hover:bg-white/5 transition-colors"><LogOut className="w-5 h-5 mr-3 opacity-80" />Logout</button>
+            <button onClick={onLanguageToggle} className="w-full flex items-center px-3 py-2 text-sm text-orange-100 hover:text-white rounded-lg hover:bg-white/5 transition-colors">
+                <Globe className="w-5 h-5 mr-3 opacity-80" />
+                {t.language} ({language === 'en' ? 'EN' : '中文'})
+            </button>
+            <button onClick={onLogout} className="w-full flex items-center px-3 py-2 text-sm text-orange-100 hover:text-white rounded-lg hover:bg-white/5 transition-colors">
+                <LogOut className="w-5 h-5 mr-3 opacity-80" />
+                {t.logout}
+            </button>
         </div>
       </aside>
     </>
